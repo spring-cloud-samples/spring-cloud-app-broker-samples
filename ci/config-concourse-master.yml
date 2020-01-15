@@ -1,0 +1,3 @@
+scs-slack-failure-channel: "#sc-app-broker"
+branch: master
+samples-repo: https://github.com/spring-cloud-samples/spring-cloud-app-broker-samples

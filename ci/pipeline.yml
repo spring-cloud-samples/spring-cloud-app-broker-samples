@@ -1,0 +1,43 @@
+---
+aliases:
+  - &slack-failure-notification
+    put: alert
+    params:
+      icon_emoji: ":animal:"
+      username: concourse
+      channel: {{scs-slack-failure-channel}}
+      text: <!here> Build <https://scs.ci.springapps.io/builds/$BUILD_ID|$BUILD_NAME> of job $BUILD_JOB_NAME in the $BUILD_PIPELINE_NAME pipeline has failed!
+
+jobs:
+  - name: build
+    serial: true
+    public: true
+    plan:
+      - get: samples-repo
+        trigger: true
+      - task: run-tests
+        file: samples-repo/ci/tasks/run-tests.yml
+        on_failure:
+          *slack-failure-notification
+
+resource_types:
+  - name: slack-notification
+    type: docker-image
+    source:
+      repository: cfcommunity/slack-notification-resource
+      tag: latest
+
+resources:
+  - name: samples-repo
+    type: git
+    source:
+      uri: ((samples-repo))
+      branch: ((branch))
+
+  - name: alert
+    type: slack-notification
+    source:
+      url: {{scs-slack-webhook}}
+groups:
+  - name: "Build"
+    jobs: ["build"]
