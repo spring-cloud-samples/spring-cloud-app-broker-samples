@@ -1,2 +1,65 @@
 = Spring Cloud App Broker Samples
 
+
+== Parameters transformers
+
+One of the very first things every broker will need to do is handling user input parameters.
+For that, `spring-cloud-app-broker` comes with two `parameter-transformer` out of the box and a mechanism to implement your own:
+
+[source, yml, indent=0]
+----
+parameters-transformers:
+  - name: EnvironmentMapping
+    args:
+      include: lang
+  - name: PropertyMapping
+    args:
+      include: count,upgrade,memory
+  - name: RequestTimeoutParameterTransformer
+----
+
+The first transformer is `PropertyMapping` where we can specify some deployment properties. We included three properties:
+`count` to allow our backing app to be scaled
+`upgrade` to upgrade the backing app to a new version
+`memory` to modify the default memory used by the backing app
+
+A full list of supported properties can be found in:
+https://docs.spring.io/spring-cloud-app-broker/docs/current/reference/html5/#_properties_configuration
+
+The second transformer is `EnvironmentMapping`, where we can list which properties we want to be passed from parameters to environment variables in the backing app.
+
+It is typical that we want to have some business logic on the way we handle the parameters, for that, we can create our own `ParameterTransformer`.
+On this example, we created a custom `RequestTimeoutParameterTransformer` where we are going to map a parameter from `request-timeout-ms` to an environment variable `my-app.httpclient.connect-timeout`.
+
+To achieve that we have to create our class:
+
+[source, java, indent=0]
+----
+public class RequestTimeoutParameterTransformer extends ParametersTransformerFactory<BackingApplication, Object> {
+
+        @Override
+        public ParametersTransformer<BackingApplication> create(Object config) {
+                return this::transform;
+        }
+
+        private Mono<BackingApplication> transform(
+                BackingApplication backingApplication, Map<String, Object> parameters) {
+                if (parameters.containsKey("request-timeout-ms")) {
+                        backingApplication
+                                .addEnvironment("my-app.httpclient.connect-timeout", parameters.get("request-timeout-ms"));
+                        parameters.remove("request-timeout-ms");
+                }
+                return Mono.just(backingApplication);
+        }
+
+}
+----
+
+And then register it as a bean:
+[source, java, indent=0]
+----
+@Bean
+public ParametersTransformerFactory<BackingApplication, Object> requestTimeoutParameterTransformerFactory() {
+        return new RequestTimeoutParameterTransformer();
+}
+----

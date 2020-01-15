@@ -31,8 +31,8 @@ dependencies {
     implementation "org.springframework.boot:spring-boot-starter-webflux"
     implementation "org.springframework.cloud:spring-cloud-starter-app-broker-cloudfoundry:${springCloudAppBrokerVersion}"
 
+    testImplementation "io.projectreactor:reactor-test"
     testImplementation("org.springframework.boot:spring-boot-starter-test") {
         exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
     }
-//	testImplementation("io.rest-assured:rest-assured")
 }

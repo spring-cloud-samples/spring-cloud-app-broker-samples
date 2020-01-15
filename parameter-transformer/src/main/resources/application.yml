@@ -24,6 +24,15 @@ spring:
           apps:
             - name: example-service-app1
               path: classpath:demo.jar
+              parameters-transformers:
+                - name: EnvironmentMapping
+                  args:
+                    include: lang
+                - name: PropertyMapping
+                  args:
+                    include: count,upgrade,memory
+                - name: RequestTimeoutParameterTransformer
+
       deployer:
         cloudfoundry:
           api-host: api.sys.example.com
