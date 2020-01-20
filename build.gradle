@@ -24,6 +24,10 @@ buildscript {
     }
 }
 
+plugins {
+    id "io.franzbecker.gradle-lombok" version '3.2.0'
+}
+
 ext {
     springCloudAppBrokerVersion = project.findProperty("springCloudAppBrokerVersion") ?: "1.0.4.RELEASE"
     springBootVersion = project.findProperty("springBootVersion") ?: "2.2.2.RELEASE"
@@ -50,11 +54,13 @@ configure(allprojects) {
     apply plugin: "pmd"
     apply plugin: "checkstyle"
     apply plugin: "io.spring.dependency-management"
+    apply plugin: "io.franzbecker.gradle-lombok"
 
     repositories {
         mavenCentral()
         maven { url "https://repo.spring.io/libs-release" }
         maven { url "https://repo.spring.io/libs-snapshot" }
+        maven { url "https://repo.spring.io/milestone" }
     }
 
     dependencies {
@@ -84,6 +90,11 @@ configure(allprojects) {
         ruleSets = []
         ruleSetFiles = files("${project.rootDir}/src/pmd/pmdTestRuleSet.xml")
         source = "src/test/java"
+    }
+
+    lombok {
+        version = '1.18.2'
+        sha256 = "524e0a697e9d62950b2f763d88d35cd8dc82a9a1"
     }
 
     test {

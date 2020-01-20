@@ -118,3 +118,141 @@ public class ServiceInstanceParametersValidatorWorkflow implements CreateService
 
 }
 ----
+
+== Service Instance state repositories
+
+Service brokers are not stateless.
+While creating, updating, deleting or binding and unbinding new service instances, there is a time-gap while that operation is in progress.
+By default, `spring-cloud-app-broker` provides some `InMemory` implementations of the `ServiceInstanceStateRepository` and `ServiceInstanceBindingStateRepository`, which are a great starting point but it is not a great idea to use them in production.
+Since, if the broker restarts, that state will be lost, leading to orphan Service Instances.
+
+To avoid that problem, we have to implement a Repository to persist the state in a database and not in memory.
+
+To achieve that we have are going to use https://spring.io/projects/spring-data-r2dbc[spring-data-r2dbc].
+
+First, we need to create our Service Instance data class
+
+[source,java,indent=0]
+----
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+class ServiceInstance {
+	@Id
+	private Long id;
+	private String serviceInstanceId;
+	private String description;
+	private OperationState operationState;
+}
+----
+
+And a Repository using the new `ReactiveCrudRepository`:
+[source,java,indent=0]
+----
+interface ServiceInstanceRepository extends ReactiveCrudRepository<ServiceInstance, Long> {
+
+	@Query("select * from service_instance where service_instance_id = :service_instance_id")
+	Mono<ServiceInstance> findByServiceInstanceId(@Param("service_instance_id") String serviceInstanceId);
+
+	@Query("delete from service_instance where service_instance_id = :service_instance_id")
+	Mono<Void> deleteByServiceInstanceId(@Param("service_instance_id") String serviceInstanceId);
+
+}
+----
+
+Now that we have our reactive Repository in place, we can implement the `ServiceInstanceStateRepository` class methods:
+
+[source,java,indent=0]
+----
+class DefaultServiceInstanceStateRepository implements ServiceInstanceStateRepository {
+
+	private final ServiceInstanceRepository serviceInstanceRepository;
+
+	DefaultServiceInstanceStateRepository(ServiceInstanceRepository serviceInstanceRepository) {
+		this.serviceInstanceRepository = serviceInstanceRepository;
+	}
+
+	@Override
+	public Mono<ServiceInstanceState> saveState(String serviceInstanceId, OperationState state, String description) {
+		return serviceInstanceRepository.findByServiceInstanceId(serviceInstanceId)
+			.flatMap(serviceInstance -> {
+				if (serviceInstance == null) {
+					serviceInstance = new ServiceInstance();
+				}
+
+				serviceInstance.setServiceInstanceId(serviceInstanceId);
+				serviceInstance.setOperationState(state);
+				serviceInstance.setDescription(description);
+
+				return Mono.just(serviceInstance);
+			})
+			.flatMap(serviceInstanceRepository::save)
+			.map(DefaultServiceInstanceStateRepository::toServiceInstanceState);
+	}
+
+	@Override
+	public Mono<ServiceInstanceState> getState(String serviceInstanceId) {
+		return serviceInstanceRepository.findByServiceInstanceId(serviceInstanceId)
+			.flatMap(serviceInstance -> {
+				if (serviceInstance == null) {
+					return Mono.error(new IllegalArgumentException("Unknown service instance ID " + serviceInstanceId));
+				}
+				return Mono.just(serviceInstance);
+			})
+			.map(DefaultServiceInstanceStateRepository::toServiceInstanceState);
+	}
+
+	@Override
+	public Mono<ServiceInstanceState> removeState(String serviceInstanceId) {
+		return getState(serviceInstanceId)
+			.doOnNext(serviceInstanceState -> serviceInstanceRepository.deleteByServiceInstanceId(serviceInstanceId));
+	}
+
+	private static ServiceInstanceState toServiceInstanceState(ServiceInstance serviceInstance) {
+		return new ServiceInstanceState(serviceInstance.getOperationState(), serviceInstance.getDescription(), null);
+	}
+
+}
+----
+The same applies to Service Instance Binding states.
+
+For them to be considered by Spring, we have to add them to our Configuration class:
+
+[source,java,indent=0]
+----
+@Configuration
+@EnableR2dbcRepositories
+@EnableTransactionManagement
+public class DataConfiguration {
+
+	@Bean
+	DefaultServiceInstanceStateRepository serviceInstanceStateRepository(
+		ServiceInstanceRepository serviceInstanceRepository) {
+		return new DefaultServiceInstanceStateRepository(serviceInstanceRepository);
+	}
+
+	@Bean
+	DefaultServiceInstanceBindingStateRepository serviceInstanceBindingStateRepository(
+		ServiceInstanceBindingRepository serviceInstanceBindingRepository) {
+		return new DefaultServiceInstanceBindingStateRepository(serviceInstanceBindingRepository);
+	}
+
+}
+----
+
+Since our broker is fully reactive, we went for an implementation based on R2DBC.
+
+A not recommended alternative, not fully reactive, is wrapping a blocking database call into a `Mono.fromCallable(() -> ...)`.
+However, this can easily lead to a thread exhaustion and subsequent memory problems if there are enough calls being made to the database.
+
+An example of this approach is:
+
+[source,java,indent=0]
+----
+@Override
+public Mono<ServiceInstanceState> getState(String serviceInstanceId) {
+    return Mono.fromCallable(() -> crudRepository.findByServiceInstanceId(serviceInstanceId))
+               .flatMap(optionalServiceInstance -> Mono.defer(() -> Mono.just(optionalServiceInstance.get())))
+               .map(DefaultServiceInstanceStateRepository::toServiceInstanceState);
+}
+----
