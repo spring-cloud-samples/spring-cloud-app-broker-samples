@@ -3,7 +3,7 @@
 
 == Parameters transformers
 
-One of the very first things every broker will need to do is handling user input parameters.
+One of the very first things every broker will need to do is handle user input parameters.
 For that, `spring-cloud-app-broker` comes with two `parameter-transformer` out of the box and a mechanism to implement your own:
 
 [source, yml, indent=0]
@@ -61,5 +61,60 @@ And then register it as a bean:
 @Bean
 public ParametersTransformerFactory<BackingApplication, Object> requestTimeoutParameterTransformerFactory() {
         return new RequestTimeoutParameterTransformer();
+}
+----
+
+== Creating workflows
+
+With the default configuration, `spring-cloud-app-broker` handles the implementation of the basic operations a broker can handle: create, update, delete, bind, and unbind.
+However, there are going to be times where we want to perform actions before or after some of those operations.
+To help with that, `spring-cloud-app-broker` provides `https://docs.spring.io/spring-cloud-app-broker/docs/current/reference/html5/#_creating_a_service_instance[Workflows]`.
+Every Workflow can have an `@Order` associated with it so that we can decide when to execute it.
+
+A good practice is to keep the order in the same class so that we can easily read the order of all our workflows.
+
+We created one for Service Instances:
+
+[source,java,indent=0]
+----
+public class ServiceInstanceServiceOrder {
+    private static final int CREATE_SI_WORKFLOW_ORDER = 0;
+
+	public static final int VALIDATE_CREATE_PARAMETERS = CREATE_SI_WORKFLOW_ORDER - 400;
+}
+----
+
+An example of Workflow that runs before creating a Service Instance is validating the parameters:
+
+[source,java,indent=0]
+----
+@Component
+@Order(VALIDATE_CREATE_PARAMETERS)
+public class ServiceInstanceParametersValidatorWorkflow implements CreateServiceInstanceWorkflow {
+
+	private static final String SERVICE_NAME = "example";
+
+	private static final List<String> SUPPORTED_PARAMETERS = Arrays.asList("count", "memory", "routes"); // TODO java 14
+
+	@Override
+	public Mono<Boolean> accept(CreateServiceInstanceRequest request) {
+		return Mono.just(SERVICE_NAME.equals(request.getServiceDefinition().getName()));
+	}
+
+	@Override
+	public Mono<CreateServiceInstanceResponseBuilder> buildResponse(
+		CreateServiceInstanceRequest request,
+		CreateServiceInstanceResponseBuilder responseBuilder) {
+
+		for (String parameter : request.getParameters().keySet()) {
+			if (!SUPPORTED_PARAMETERS.contains(parameter)) {
+				String errorMessage = String.format("Invalid parameter {%s}", parameter);
+				return Mono.error(new ServiceBrokerInvalidParametersException(errorMessage));
+			}
+		}
+
+		return Mono.just(responseBuilder);
+	}
+
 }
 ----

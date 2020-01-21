@@ -1,3 +1,4 @@
 rootProject.name = "spring-cloud-app-broker-samples"
 
 include "parameter-transformer"
+include "creating-workflows"
