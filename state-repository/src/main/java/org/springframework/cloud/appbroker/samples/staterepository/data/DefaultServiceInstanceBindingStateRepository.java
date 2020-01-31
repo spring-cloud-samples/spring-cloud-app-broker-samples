@@ -34,17 +34,12 @@ class DefaultServiceInstanceBindingStateRepository implements ServiceInstanceBin
 	public Mono<ServiceInstanceState> saveState(String serviceInstanceId, String bindingId, OperationState state,
 		String description) {
 		return serviceInstanceBindingRepository.findByServiceInstanceIdAndBindingId(serviceInstanceId, bindingId)
+			.switchIfEmpty(Mono.just(new ServiceInstanceBinding()))
 			.flatMap(binding -> {
-
-				if (binding == null) {
-					binding = new ServiceInstanceBinding();
-				}
-
 				binding.setServiceInstanceId(serviceInstanceId);
 				binding.setBindingId(bindingId);
 				binding.setOperationState(state);
 				binding.setDescription(description);
-
 				return Mono.just(binding);
 			})
 			.flatMap(serviceInstanceBindingRepository::save)
@@ -54,13 +49,8 @@ class DefaultServiceInstanceBindingStateRepository implements ServiceInstanceBin
 	@Override
 	public Mono<ServiceInstanceState> getState(String serviceInstanceId, String bindingId) {
 		return serviceInstanceBindingRepository.findByServiceInstanceIdAndBindingId(serviceInstanceId, bindingId)
-			.flatMap(serviceInstance -> {
-				if (serviceInstance == null) {
-					return Mono.error(new IllegalArgumentException(
-						"Unknown binding: serviceInstanceId=" + serviceInstanceId + ", bindingId=" + bindingId));
-				}
-				return Mono.just(serviceInstance);
-			})
+			.switchIfEmpty(Mono.error(new IllegalArgumentException(
+					"Unknown binding: serviceInstanceId=" + serviceInstanceId + ", bindingId=" + bindingId)))
 			.map(DefaultServiceInstanceBindingStateRepository::toServiceInstanceState);
 	}
 
