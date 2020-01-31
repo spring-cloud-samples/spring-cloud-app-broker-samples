@@ -33,15 +33,11 @@ class DefaultServiceInstanceStateRepository implements ServiceInstanceStateRepos
 	@Override
 	public Mono<ServiceInstanceState> saveState(String serviceInstanceId, OperationState state, String description) {
 		return serviceInstanceRepository.findByServiceInstanceId(serviceInstanceId)
+			.switchIfEmpty(Mono.just(new ServiceInstance()))
 			.flatMap(serviceInstance -> {
-				if (serviceInstance == null) {
-					serviceInstance = new ServiceInstance();
-				}
-
 				serviceInstance.setServiceInstanceId(serviceInstanceId);
 				serviceInstance.setOperationState(state);
 				serviceInstance.setDescription(description);
-
 				return Mono.just(serviceInstance);
 			})
 			.flatMap(serviceInstanceRepository::save)
@@ -51,12 +47,7 @@ class DefaultServiceInstanceStateRepository implements ServiceInstanceStateRepos
 	@Override
 	public Mono<ServiceInstanceState> getState(String serviceInstanceId) {
 		return serviceInstanceRepository.findByServiceInstanceId(serviceInstanceId)
-			.flatMap(serviceInstance -> {
-				if (serviceInstance == null) {
-					return Mono.error(new IllegalArgumentException("Unknown service instance ID " + serviceInstanceId));
-				}
-				return Mono.just(serviceInstance);
-			})
+			.switchIfEmpty(Mono.error(new IllegalArgumentException("Unknown service instance ID " + serviceInstanceId)))
 			.map(DefaultServiceInstanceStateRepository::toServiceInstanceState);
 	}
 
