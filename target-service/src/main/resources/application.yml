@@ -1,0 +1,43 @@
+spring:
+  cloud:
+    openservicebroker:
+      catalog:
+        services:
+          - id: example-service-id
+            name: example
+            description: A simple example
+            bindable: true
+            tags:
+              - example
+                tags
+            plans:
+              - id: standard-plan-id
+                bindable: true
+                name: standard
+                description: A simple plan
+                free: true
+
+    appbroker:
+      services:
+        - service-name: example
+          plan-name: standard
+          apps:
+            - name: example-service-app1
+              path: classpath:demo.jar
+              parameters-transformers:
+                - name: EnvironmentMapping
+                  args:
+                    include: lang
+                - name: PropertyMapping
+                  args:
+                    include: count,upgrade,memory
+                - name: RequestTimeoutParameterTransformer
+
+      deployer:
+        cloudfoundry:
+          api-host: api.sys.example.com
+          api-port: 443
+          username: admin
+          password: adminpass
+          default-org: test
+          default-space: development
